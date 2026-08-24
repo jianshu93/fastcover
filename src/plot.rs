@@ -6,6 +6,8 @@ use plotters::prelude::*;
 
 use crate::coverage_model::{self, CoverageModel};
 
+const MIN_PLOT_EFFORT_BP: f64 = 1.0e6;
+
 #[derive(Clone, Debug)]
 pub struct PlotSample {
     pub label: String,
@@ -43,8 +45,12 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
             .filter(|p| p.adjusted_effort > 0.0)
             .map(|p| p.adjusted_effort)
             .fold(f64::INFINITY, f64::min)
-            .max(1.0);
-        let min_x = if min_x.is_finite() { min_x } else { 1.0 };
+            .max(MIN_PLOT_EFFORT_BP);
+        let min_x = if min_x.is_finite() {
+            min_x
+        } else {
+            MIN_PLOT_EFFORT_BP
+        };
         let observed_max_x = samples
             .iter()
             .flat_map(|sample| sample.model.points.iter())
