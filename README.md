@@ -82,6 +82,12 @@ List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-
 
 The plot is SVG and PDF only. Empirical lines/dots are emphasized, gamma-model curves are thinner transparent dashed lines, grid lines are disabled, and multi-sample colors are generated with a golden-angle palette for many-sample overlays. The legend reports the observed current-effort coverage (`C`) and matched fitted coverage (`fit`); grey dashed guides mark current sequencing effort and the matched fitted coverage levels.
 
+Here is an example:
+<div align="center">
+  <img width="90%" src ="fastcover_example.jpg">
+</div>
+
+
 ## Coverage Model
 
 The coverage model adapts the informative part of Nonpareil's R workflow: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, adjusted sequencing effort uses the `C^0.27` exponent, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. Nonpareil's R plotting/modeling code reads the `.npo` redundancy summary, not the `.npc` mate-count distribution. FastCover's default long-read curve therefore uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
