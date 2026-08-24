@@ -87,7 +87,7 @@ The plot is SVG and PDF only. The x-axis starts at `1e6` bp because smaller effo
 
 Here is an example:
 <div align="center">
-  <img width="90%" src ="fastcover_example.jpg">
+  <img width="100%" src ="fastcover_example.jpg">
 </div>
 
 
