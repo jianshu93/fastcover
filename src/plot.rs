@@ -193,32 +193,35 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
                     .map_err(|e| anyhow::anyhow!("failed to draw matched-coverage point: {e:?}"))?;
             }
 
-            let current_effort = current_efforts[0];
-            let arrow_style = ShapeStyle::from(&sample_color(0)).stroke_width(3);
-            let x_arrow_top = (max_matched_coverage * 0.55).clamp(0.12, 0.72);
-            let x_arrow_tip = 0.035;
-            chart
-                .draw_series([
-                    PathElement::new(
-                        [(current_effort, x_arrow_top), (current_effort, x_arrow_tip)],
-                        arrow_style,
-                    ),
-                    PathElement::new(
-                        [
-                            (current_effort / 1.18, x_arrow_tip + 0.035),
-                            (current_effort, x_arrow_tip),
-                        ],
-                        arrow_style,
-                    ),
-                    PathElement::new(
-                        [
-                            (current_effort * 1.18, x_arrow_tip + 0.035),
-                            (current_effort, x_arrow_tip),
-                        ],
-                        arrow_style,
-                    ),
-                ])
-                .map_err(|e| anyhow::anyhow!("failed to draw current-effort arrow: {e:?}"))?;
+            let x_arrow_tip = 0.01;
+            let x_arrow_full_top = (max_matched_coverage * 0.55).clamp(0.12, 0.72);
+            let x_arrow_top = x_arrow_tip + (x_arrow_full_top - x_arrow_tip) * 0.20;
+            for guide in &guides {
+                let current_effort = guide.current_effort;
+                let arrow_style = ShapeStyle::from(&guide.color).stroke_width(3);
+                chart
+                    .draw_series([
+                        PathElement::new(
+                            [(current_effort, x_arrow_top), (current_effort, x_arrow_tip)],
+                            arrow_style,
+                        ),
+                        PathElement::new(
+                            [
+                                (current_effort / 1.18, x_arrow_tip + 0.035),
+                                (current_effort, x_arrow_tip),
+                            ],
+                            arrow_style,
+                        ),
+                        PathElement::new(
+                            [
+                                (current_effort * 1.18, x_arrow_tip + 0.035),
+                                (current_effort, x_arrow_tip),
+                            ],
+                            arrow_style,
+                        ),
+                    ])
+                    .map_err(|e| anyhow::anyhow!("failed to draw current-effort arrow: {e:?}"))?;
+            }
         }
 
         chart
