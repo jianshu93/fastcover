@@ -88,6 +88,9 @@ pub struct RunConfig {
 
     /// Random seed for reproducible curve resampling.
     pub seed: u64,
+
+    /// Optional Nonpareil-style C^EXP effort adjustment. None means raw base effort.
+    pub c_adjust: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -360,7 +363,8 @@ fn run_sample(args: &RunConfig, sample: &SampleInput, prefix: &Path) -> Result<P
         sample_start.elapsed().as_secs_f64()
     );
 
-    let fitted_model = coverage_model::fit_from_summaries(&summaries, reads.len(), total_bases);
+    let fitted_model =
+        coverage_model::fit_from_summaries(&summaries, reads.len(), total_bases, args.c_adjust);
     write_summary(
         &paths.summary,
         &summaries,

@@ -40,6 +40,8 @@ pub struct CoverageModel {
     pub total_bases: usize,
     pub average_read_length: f64,
     pub coverage_factor: f64,
+    pub c_adjust: Option<f64>,
+    pub effort_adjust_scale: f64,
     pub kappa: f64,
     pub observed_coverage: f64,
     pub total_effort: f64,
@@ -74,6 +76,7 @@ pub fn fit_from_summaries(
     summaries: &[SampleSummary],
     total_reads: usize,
     total_bases: usize,
+    c_adjust: Option<f64>,
 ) -> CoverageModel {
     let average_read_length = if total_reads == 0 {
         0.0
@@ -84,6 +87,7 @@ pub fn fit_from_summaries(
     let coverage_factor = long_read_coverage_factor();
     let kappa = summaries.last().map(|s| clamp01(s.mean)).unwrap_or(0.0);
     let observed_coverage = redundancy_to_coverage(kappa, coverage_factor);
+    let effort_adjust_scale = effort_adjust_scale(observed_coverage, c_adjust);
     let total_effort = total_bases as f64;
     let mut points = build_points(
         summaries,
@@ -91,6 +95,7 @@ pub fn fit_from_summaries(
         average_read_length,
         coverage_factor,
         observed_coverage,
+        c_adjust,
     );
 
     let fit_data = points
@@ -155,6 +160,8 @@ pub fn fit_from_summaries(
         total_bases,
         average_read_length,
         coverage_factor,
+        c_adjust,
+        effort_adjust_scale,
         kappa,
         observed_coverage,
         total_effort,
@@ -188,6 +195,19 @@ pub fn write_model(path: &Path, model: &CoverageModel) -> Result<()> {
         w,
         "# @coverage_factor: {}",
         fmt_float(model.coverage_factor)
+    )?;
+    writeln!(
+        w,
+        "# @C_adjust: {}",
+        model
+            .c_adjust
+            .map(fmt_float)
+            .unwrap_or_else(|| "none".into())
+    )?;
+    writeln!(
+        w,
+        "# @effort_adjust_scale: {}",
+        fmt_float(model.effort_adjust_scale)
     )?;
     writeln!(w, "# @kappa: {}", fmt_float(model.kappa))?;
     writeln!(w, "# @C: {}", fmt_float(model.observed_coverage))?;
@@ -248,6 +268,7 @@ fn build_points(
     _average_read_length: f64,
     coverage_factor: f64,
     observed_coverage: f64,
+    c_adjust: Option<f64>,
 ) -> Vec<ModelPoint> {
     let positive_bases = summaries
         .iter()
@@ -258,7 +279,7 @@ fn build_points(
         .copied()
         .map(f64::ln)
         .fold(f64::NEG_INFINITY, f64::max);
-    let c_scale = observed_coverage.max(1e-12).powf(0.27);
+    let c_scale = effort_adjust_scale(observed_coverage, c_adjust);
 
     let mut pre_adjusted = Vec::with_capacity(summaries.len());
     let mut max_pre_adjusted = 0.0_f64;
@@ -311,6 +332,12 @@ fn long_read_coverage_factor() -> f64 {
     // FastCover uses the long-read overlap ratio directly rather than a short-read overlap correction.
     // The observed redundant read fraction is therefore interpreted on the coverage scale.
     1.0
+}
+
+fn effort_adjust_scale(observed_coverage: f64, c_adjust: Option<f64>) -> f64 {
+    c_adjust
+        .map(|exponent| observed_coverage.max(1e-12).powf(exponent))
+        .unwrap_or(1.0)
 }
 
 fn redundancy_to_coverage(redundancy: f64, coverage_factor: f64) -> f64 {
@@ -712,8 +739,72 @@ mod tests {
                 q3: 0.5,
             },
         ];
-        let model = fit_from_summaries(&summaries, 100, 12_000);
+        let model = fit_from_summaries(&summaries, 100, 12_000, None);
         let last = model.points.last().unwrap();
         assert!((last.adjusted_effort - 12_000.0).abs() < 1e-6);
+        assert_eq!(model.c_adjust, None);
+        assert!((model.effort_adjust_scale - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn default_adjusted_effort_uses_raw_bases() {
+        let summaries = vec![
+            SampleSummary {
+                reads: 50,
+                bases: 6_000,
+                portion: 0.5,
+                mean: 0.2,
+                sd: 0.01,
+                q1: 0.15,
+                median: 0.2,
+                q3: 0.25,
+            },
+            SampleSummary {
+                reads: 100,
+                bases: 12_000,
+                portion: 1.0,
+                mean: 0.4,
+                sd: 0.01,
+                q1: 0.3,
+                median: 0.4,
+                q3: 0.5,
+            },
+        ];
+        let model = fit_from_summaries(&summaries, 100, 12_000, None);
+        assert!((model.points[0].adjusted_effort - 6_000.0).abs() < 1e-6);
+        assert!((model.points[1].adjusted_effort - 12_000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn c_adjust_moves_lower_effort_points_toward_full_effort() {
+        let summaries = vec![
+            SampleSummary {
+                reads: 50,
+                bases: 6_000,
+                portion: 0.5,
+                mean: 0.2,
+                sd: 0.01,
+                q1: 0.15,
+                median: 0.2,
+                q3: 0.25,
+            },
+            SampleSummary {
+                reads: 100,
+                bases: 12_000,
+                portion: 1.0,
+                mean: 0.4,
+                sd: 0.01,
+                q1: 0.3,
+                median: 0.4,
+                q3: 0.5,
+            },
+        ];
+        let model = fit_from_summaries(&summaries, 100, 12_000, Some(0.27));
+        assert_eq!(model.c_adjust, Some(0.27));
+        assert!(model.effort_adjust_scale > 0.0);
+        assert!(model.effort_adjust_scale < 1.0);
+        assert!(model.points[0].adjusted_effort > 6_000.0);
+        assert!(model.points[0].adjusted_effort < 12_000.0);
+        assert!((model.points[1].adjusted_effort - 12_000.0).abs() < 1e-6);
     }
 }

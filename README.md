@@ -45,6 +45,8 @@ target/release/fastcover \
 
 By default, `fastcover` uses all logical CPU cores through Rayon. Use `--threads` only when you want to cap the worker count.
 
+Coverage-curve effort is raw sampled bases by default. To reproduce the original Nonpareil-style log-effort adjustment, pass `--c-adjust` or `--c-adjust=0.27`; custom exponents must be strictly between `0` and `1`.
+
 For multiple samples, use `--list` instead of `--input`. Each non-comment line is `path` followed by an optional sample label:
 
 ```text
@@ -69,6 +71,7 @@ List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-
 - `--alignment-targets` is the number of top sketch-passing targets searched with rammap-core semi-global DP per query. The default is `3`; values above `16` are rejected. Only the single best verified alignment is used for redundancy, so larger values increase search depth but cannot add multiple mates to one query.
 - `--min-alignment-ratio` filters by the shorter-read overlap ratio, `overlap_len / min(query_len, target_len)`. This rejects tiny end overlaps and requires the shorter read to be meaningfully covered.
 - `--min-query-coverage` filters by query-side coverage, `overlap_len / query_len`. This prevents a long query from being called redundant when only a small part of it overlaps a shorter target. The default is `0.75`; set it to `0` for shorter-read-only Nonpareil-like overlap behavior.
+- `--c-adjust[=EXP]` enables optional Nonpareil-style adjusted effort, `E' = B * (E / B)^(C^EXP)`, where `B` is total sampled bases at full effort and `C` is the observed full-effort coverage. With no value, `EXP` is `0.27`; without the option, FastCover uses raw base effort, `E' = E`.
 
 ## Outputs
 
@@ -90,4 +93,4 @@ Here is an example:
 
 ## Coverage Model
 
-The coverage model adapts the informative part of Nonpareil's R workflow: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, adjusted sequencing effort uses the `C^0.27` exponent, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. Nonpareil's R plotting/modeling code reads the `.npo` redundancy summary, not the `.npc` mate-count distribution. FastCover's default long-read curve therefore uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
+The coverage model: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the log-effort transform, . FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.

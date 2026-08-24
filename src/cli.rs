@@ -220,6 +220,15 @@ pub fn command() -> Command {
                 .default_value("1")
                 .value_parser(value_parser!(u64)),
         )
+        .arg(
+            Arg::new("c-adjust")
+                .long("c-adjust")
+                .help("Enable C^EXP adjusted effort; omit this option for raw base effort")
+                .value_name("EXP")
+                .num_args(0..=1)
+                .default_missing_value("0.27")
+                .value_parser(value_parser!(f64)),
+        )
 }
 
 fn config_from_matches(matches: ArgMatches) -> Result<RunConfig> {
@@ -243,6 +252,13 @@ fn config_from_matches(matches: ArgMatches) -> Result<RunConfig> {
         final_bandwidth >= -1,
         "--final-bandwidth must be -1 or a non-negative integer"
     );
+    let c_adjust = matches.get_one::<f64>("c-adjust").copied();
+    if let Some(value) = c_adjust {
+        anyhow::ensure!(
+            value.is_finite() && value > 0.0 && value < 1.0,
+            "--c-adjust must be finite and in the open interval (0,1)"
+        );
+    }
 
     Ok(RunConfig {
         input: matches.get_one::<PathBuf>("input").cloned(),
@@ -302,6 +318,7 @@ fn config_from_matches(matches: ArgMatches) -> Result<RunConfig> {
             .get_one::<f64>("divide")
             .context("missing --divide")?,
         seed: *matches.get_one::<u64>("seed").context("missing --seed")?,
+        c_adjust,
     })
 }
 
@@ -314,4 +331,46 @@ fn normalize_identity(value: f64, name: &str) -> Result<f64> {
         return Ok(value / 100.0);
     }
     anyhow::bail!("{name} must be in [0,1] or [1,100]");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn c_adjust_is_disabled_by_default() {
+        let matches = command()
+            .try_get_matches_from(["fastcover", "--input", "reads.fq"])
+            .unwrap();
+        let config = config_from_matches(matches).unwrap();
+        assert_eq!(config.c_adjust, None);
+    }
+
+    #[test]
+    fn c_adjust_without_value_uses_nonpareil_exponent() {
+        let matches = command()
+            .try_get_matches_from(["fastcover", "--input", "reads.fq", "--c-adjust"])
+            .unwrap();
+        let config = config_from_matches(matches).unwrap();
+        assert_eq!(config.c_adjust, Some(0.27));
+    }
+
+    #[test]
+    fn c_adjust_accepts_custom_value() {
+        let matches = command()
+            .try_get_matches_from(["fastcover", "--input", "reads.fq", "--c-adjust=0.4"])
+            .unwrap();
+        let config = config_from_matches(matches).unwrap();
+        assert_eq!(config.c_adjust, Some(0.4));
+    }
+
+    #[test]
+    fn c_adjust_rejects_closed_interval_edges() {
+        for value in ["0", "1"] {
+            let matches = command()
+                .try_get_matches_from(["fastcover", "--input", "reads.fq", "--c-adjust", value])
+                .unwrap();
+            assert!(config_from_matches(matches).is_err());
+        }
+    }
 }
