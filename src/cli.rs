@@ -13,7 +13,7 @@ pub fn command() -> Command {
     Command::new("fastcover")
         .version(env!("CARGO_PKG_VERSION"))
         .about(
-            "FastCover: long-read metagenomic coverage and diversity estimation with a seed-chain-quasi-alignment and a final exact extension alignment",
+            "FastCover: long-read metagenomic coverage and diversity estimation with a minimizer-Jaccard seed-chain quasi-aligner",
         )
         .arg(
             Arg::new("input")
@@ -201,7 +201,7 @@ pub fn command() -> Command {
                 .long("replicates")
                 .help("Random replicates per coverage-curve point")
                 .value_name("N")
-                .default_value("1024")
+                .default_value("32")
                 .value_parser(value_parser!(usize)),
         )
         .arg(

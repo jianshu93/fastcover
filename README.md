@@ -9,11 +9,6 @@ It is a single-command program. The core method uses SIMD canonical minimizer po
 The minimizer window is derived by default from a TurboANI/MashMap-style p-value equation. For long-read overlap filtering the default calibration uses `k=16`, `--identity 95`, `--p-value 0.001`, an internal fragment length inferred from the sample mean read length, and `--reference-size 100000`. The fragment length controls minimizer sampling density; the 100 kb reference size controls the random-hit search space. The actual overlap length is not a global parameter: for each candidate pair, the winning sliding offset defines the aligned span. FastCover reports both a symmetric shorter-read overlap ratio, `alignment_ratio = overlap_len / min(query_len,target_len)`, and query-side coverage, `query_coverage = overlap_len / query_len`.
 
 ## Build
-
-```bash
-cargo build --release
-```
-
 For CPU-optimized builds, follow the same target-CPU style used by TurboANI:
 
 ```bash
