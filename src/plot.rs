@@ -7,6 +7,9 @@ use plotters::prelude::*;
 use crate::coverage_model::{self, CoverageModel};
 
 const MIN_PLOT_EFFORT_BP: f64 = 1.0e6;
+const PLOT_WIDTH: u32 = 1040;
+const PLOT_HEIGHT: u32 = 450;
+const COVERAGE_PANEL_FRACTION: f64 = 0.60;
 
 #[derive(Clone, Debug)]
 pub struct PlotSample {
@@ -35,9 +38,11 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
     anyhow::ensure!(!samples.is_empty(), "no samples to plot");
     let mut svg = String::new();
     {
-        let root = SVGBackend::with_string(&mut svg, (680, 450)).into_drawing_area();
+        let root = SVGBackend::with_string(&mut svg, (PLOT_WIDTH, PLOT_HEIGHT)).into_drawing_area();
         root.fill(&WHITE)
             .map_err(|e| anyhow::anyhow!("failed to initialize SVG drawing area: {e:?}"))?;
+        let coverage_panel_width = (PLOT_WIDTH as f64 * COVERAGE_PANEL_FRACTION).round() as u32;
+        let (coverage_area, diversity_area) = root.split_horizontally(coverage_panel_width);
 
         let min_x = samples
             .iter()
@@ -71,9 +76,9 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
             .map(|(idx, sample)| coverage_guide(sample, sample_color(idx), min_x, max_x))
             .collect::<Vec<_>>();
 
-        let mut chart = ChartBuilder::on(&root)
+        let mut chart = ChartBuilder::on(&coverage_area)
             .margin(20)
-            .caption("FastCover Coverage Curve", ("sans-serif", 28))
+            .caption("Stevens Coverage Curve", ("sans-serif", 26))
             .x_label_area_size(62)
             .y_label_area_size(78)
             .build_cartesian_2d((min_x..(max_x * 1.02)).log_scale(), 0f64..1.0)
@@ -238,10 +243,96 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
             .draw()
             .map_err(|e| anyhow::anyhow!("failed to draw legend: {e:?}"))?;
 
+        draw_diversity_bars(&diversity_area, samples)?;
+
         root.present()
             .map_err(|e| anyhow::anyhow!("failed to finalize SVG plot: {e:?}"))?;
     }
     Ok(svg)
+}
+
+fn draw_diversity_bars<DB: DrawingBackend>(
+    area: &DrawingArea<DB, plotters::coord::Shift>,
+    samples: &[PlotSample],
+) -> Result<()>
+where
+    DB::ErrorType: std::fmt::Debug,
+{
+    let diversities = samples
+        .iter()
+        .map(|sample| {
+            sample
+                .model
+                .diversity
+                .filter(|value| value.is_finite() && *value > 0.0)
+                .unwrap_or(0.0)
+        })
+        .collect::<Vec<_>>();
+    let max_diversity = diversities.iter().copied().fold(0.0_f64, f64::max);
+    let y_max = if max_diversity > 0.0 {
+        (max_diversity * 1.12).max(max_diversity + 0.5)
+    } else {
+        1.0
+    };
+    let sample_count = samples.len();
+    let x_end = sample_count as f64 - 0.5;
+    let show_sample_labels = sample_count <= 6;
+
+    let mut chart = ChartBuilder::on(area)
+        .margin(20)
+        .caption("Base-weighted Stevens Diversity", ("sans-serif", 24))
+        .x_label_area_size(if show_sample_labels { 48 } else { 24 })
+        .y_label_area_size(64)
+        .build_cartesian_2d(-0.5f64..x_end, 0f64..y_max)
+        .map_err(|e| anyhow::anyhow!("failed to build diversity bar chart: {e:?}"))?;
+
+    let x_label = |x: &f64| -> String {
+        let idx = x.round() as isize;
+        if idx >= 0 && (idx as usize) < samples.len() {
+            short_label(&samples[idx as usize].label)
+        } else {
+            String::new()
+        }
+    };
+    let mut mesh = chart.configure_mesh();
+    mesh.y_desc("Diversity (log-bp)")
+        .axis_desc_style(("sans-serif", 18))
+        .label_style(("sans-serif", 15))
+        .disable_mesh();
+    if show_sample_labels {
+        mesh.x_desc("Sample")
+            .x_labels(sample_count)
+            .x_label_formatter(&x_label);
+    } else {
+        mesh.x_labels(0);
+    }
+    mesh.draw()
+        .map_err(|e| anyhow::anyhow!("failed to draw diversity chart mesh: {e:?}"))?;
+
+    chart
+        .draw_series(diversities.iter().enumerate().map(|(idx, &diversity)| {
+            let x = idx as f64;
+            let color = sample_color(idx);
+            Rectangle::new([(x - 0.34, 0.0), (x + 0.34, diversity)], color.filled())
+        }))
+        .map_err(|e| anyhow::anyhow!("failed to draw Stevens diversity bars: {e:?}"))?;
+
+    let text_offset = y_max * 0.025;
+    chart
+        .draw_series(diversities.iter().enumerate().map(|(idx, &diversity)| {
+            let color = sample_color(idx);
+            Text::new(
+                format!("{diversity:.2}"),
+                (
+                    idx as f64 - 0.22,
+                    (diversity + text_offset).min(y_max * 0.98),
+                ),
+                ("sans-serif", 13).into_font().color(&color),
+            )
+        }))
+        .map_err(|e| anyhow::anyhow!("failed to draw Stevens diversity labels: {e:?}"))?;
+
+    Ok(())
 }
 
 fn coverage_guide(sample: &PlotSample, color: RGBColor, min_x: f64, max_x: f64) -> CoverageGuide {
@@ -278,6 +369,16 @@ fn coverage_legend_label(sample: &PlotSample, guide: &CoverageGuide) -> String {
         "{} C={:.3} fit={:.3}",
         sample.label, guide.observed_coverage, guide.matched_coverage
     )
+}
+
+fn short_label(label: &str) -> String {
+    const MAX_CHARS: usize = 14;
+    if label.chars().count() <= MAX_CHARS {
+        return label.to_string();
+    }
+    let mut out = label.chars().take(MAX_CHARS - 3).collect::<String>();
+    out.push_str("...");
+    out
 }
 
 fn sample_color(index: usize) -> RGBColor {

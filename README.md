@@ -80,7 +80,7 @@ List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-
 - `PREFIX.svg`: vector coverage curve.
 - `PREFIX.pdf`: vector coverage curve.
 
-The plot is SVG and PDF only. The x-axis starts at `1e6` bp because smaller efforts are below the scale of most individual microbial genomes. Empirical lines/dots are emphasized, gamma-model curves are thinner transparent dashed lines, grid lines are disabled, and multi-sample colors are generated with a golden-angle palette for many-sample overlays. The legend reports the observed current-effort coverage (`C`) and matched fitted coverage (`fit`); grey dashed guides mark current sequencing effort and the matched fitted coverage levels.
+The plot is SVG and PDF only. The x-axis starts at `1e6` bp because smaller efforts are below the scale of most individual microbial genomes. The combined figure uses the left 60% for the Stevens coverage curve and the right 40% for a base-weighted Stevens diversity bar plot. Empirical lines/dots are emphasized, gamma-model curves are thinner transparent dashed lines, grid lines are disabled, and multi-sample colors are generated with a golden-angle palette for many-sample overlays. The legend reports the observed current-effort coverage (`C`) and matched fitted coverage (`fit`); grey dashed guides mark current sequencing effort and the matched fitted coverage levels.
 
 Here is an example:
 <div align="center">
