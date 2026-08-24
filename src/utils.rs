@@ -8,6 +8,7 @@ use crate::types::{MateResult, SampleSummary};
 struct ResampleValue {
     point_idx: usize,
     portion: f64,
+    bases: u64,
     rep: usize,
     value: f64,
 }
@@ -45,11 +46,13 @@ pub fn sampling_points(total_reads: usize, divide: f64) -> Vec<f64> {
 
 pub fn sample_curve(
     mates: &[MateResult],
-    total_reads: usize,
+    read_lengths: &[usize],
     replicates: usize,
     divide: f64,
     seed: u64,
-) -> (Vec<SampleSummary>, Vec<(f64, usize, f64)>) {
+) -> (Vec<SampleSummary>, Vec<(f64, u64, usize, f64)>) {
+    let total_reads = read_lengths.len();
+    let total_bases = read_lengths.iter().sum::<usize>();
     let points = sampling_points(total_reads, divide);
     let job_count = points.len().saturating_mul(replicates);
     let mut resampled = points
@@ -62,10 +65,11 @@ pub fn sample_curve(
         .map(|(point_idx, portion, rep)| ResampleValue {
             point_idx,
             portion,
+            bases: (portion * total_bases as f64).round() as u64,
             rep,
             value: sample_once(
                 mates,
-                total_reads,
+                read_lengths,
                 portion,
                 seed ^ ((rep as u64) << 32) ^ portion.to_bits(),
             ),
@@ -80,7 +84,7 @@ pub fn sample_curve(
     let mut all = Vec::with_capacity(job_count);
     for value in resampled {
         values_by_point[value.point_idx].push(value.value);
-        all.push((value.portion, value.rep, value.value));
+        all.push((value.portion, value.bases, value.rep, value.value));
     }
 
     let summaries = points
@@ -88,42 +92,63 @@ pub fn sample_curve(
         .copied()
         .enumerate()
         .map(|(point_idx, portion)| {
-            summarize(portion, total_reads, &mut values_by_point[point_idx])
+            summarize(
+                portion,
+                total_reads,
+                total_bases,
+                &mut values_by_point[point_idx],
+            )
         })
         .collect::<Vec<_>>();
 
     (summaries, all)
 }
 
-fn sample_once(mates: &[MateResult], total_reads: usize, portion: f64, seed: u64) -> f64 {
+fn sample_once(mates: &[MateResult], read_lengths: &[usize], portion: f64, seed: u64) -> f64 {
+    let total_reads = read_lengths.len();
     if portion <= 0.0 || mates.is_empty() || total_reads <= 1 {
         return 0.0;
     }
 
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let mut sample_size = 0usize;
-    let mut found = 0usize;
+    let mut sampled = vec![false; total_reads];
+    let mut sampled_bases = 0usize;
+    let mut found_bases = 0usize;
 
-    for mate in mates {
+    for (idx, &read_len) in read_lengths.iter().enumerate() {
         if rng.r#gen::<f64>() >= portion {
             continue;
         }
-        sample_size += 1;
+        sampled[idx] = true;
+        sampled_bases = sampled_bases.saturating_add(read_len);
+    }
 
-        let p_gt_0 = 1.0 - (1.0 - portion).powi(mate.mate_count as i32);
-        if rng.r#gen::<f64>() < p_gt_0 {
-            found += 1;
+    for mate in mates {
+        if mate.query >= total_reads || !sampled[mate.query] {
+            continue;
+        }
+        if mate
+            .passing_targets
+            .iter()
+            .any(|&target| target < total_reads && sampled[target])
+        {
+            found_bases = found_bases.saturating_add(read_lengths[mate.query]);
         }
     }
 
-    if sample_size == 0 {
+    if sampled_bases == 0 {
         0.0
     } else {
-        found as f64 / sample_size as f64
+        found_bases as f64 / sampled_bases as f64
     }
 }
 
-fn summarize(portion: f64, total_reads: usize, values: &mut [f64]) -> SampleSummary {
+fn summarize(
+    portion: f64,
+    total_reads: usize,
+    total_bases: usize,
+    values: &mut [f64],
+) -> SampleSummary {
     values.sort_by(|a, b| a.total_cmp(b));
     let mean = if values.is_empty() {
         0.0
@@ -138,6 +163,7 @@ fn summarize(portion: f64, total_reads: usize, values: &mut [f64]) -> SampleSumm
     };
     SampleSummary {
         reads: (portion * total_reads as f64).round() as u64,
+        bases: (portion * total_bases as f64).round() as u64,
         portion,
         mean,
         sd,
@@ -186,6 +212,7 @@ mod tests {
             MateResult {
                 query: 0,
                 mate_count: 1,
+                passing_targets: vec![1],
                 ..MateResult::default()
             },
             MateResult {
@@ -194,8 +221,9 @@ mod tests {
                 ..MateResult::default()
             },
         ];
-        let redundancy = sample_once(&mates, 2, 1.0, 7);
-        assert!((redundancy - 0.5).abs() < f64::EPSILON);
+        let read_lengths = vec![10, 30];
+        let redundancy = sample_once(&mates, &read_lengths, 1.0, 7);
+        assert!((redundancy - 0.25).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -204,17 +232,23 @@ mod tests {
             .map(|query| MateResult {
                 query,
                 mate_count: (query % 3 != 0) as u32,
+                passing_targets: (query % 3 != 0)
+                    .then_some((query + 1) % 64)
+                    .into_iter()
+                    .collect(),
                 ..MateResult::default()
             })
             .collect::<Vec<_>>();
+        let read_lengths = (0..64).map(|idx| 1000 + idx).collect::<Vec<_>>();
 
-        let (summary_a, all_a) = sample_curve(&mates, mates.len(), 8, 0.7, 11);
-        let (summary_b, all_b) = sample_curve(&mates, mates.len(), 8, 0.7, 11);
+        let (summary_a, all_a) = sample_curve(&mates, &read_lengths, 8, 0.7, 11);
+        let (summary_b, all_b) = sample_curve(&mates, &read_lengths, 8, 0.7, 11);
 
         assert_eq!(all_a, all_b);
         assert_eq!(summary_a.len(), summary_b.len());
         for (a, b) in summary_a.iter().zip(summary_b) {
             assert_eq!(a.reads, b.reads);
+            assert_eq!(a.bases, b.bases);
             assert_eq!(a.portion, b.portion);
             assert_eq!(a.mean, b.mean);
             assert_eq!(a.sd, b.sd);

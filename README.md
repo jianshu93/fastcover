@@ -72,7 +72,7 @@ List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-
 
 ## Outputs
 
-- `PREFIX.summary.tsv`: coverage-curve summary with mean, SD, and quartiles.
+- `PREFIX.summary.tsv`: base-effort coverage-curve summary with mean, SD, and quartiles.
 - `PREFIX.all.tsv`: all replicate values behind the curve.
 - `PREFIX.model.tsv`: fitted gamma model diagnostics and curve points.
 - `PREFIX.mates.tsv`: per-read selected non-self mate count and best verified neighbor. With the default final verifier, `mate_count` is binary: `1` when the best hit passes, otherwise `0`.
@@ -90,4 +90,4 @@ Here is an example:
 
 ## Coverage Model
 
-The coverage model adapts the informative part of Nonpareil's R workflow: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, adjusted sequencing effort uses the `C^0.27` exponent, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. Nonpareil's R plotting/modeling code reads the `.npo` redundancy summary, not the `.npc` mate-count distribution. FastCover's default long-read curve therefore uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
+The coverage model adapts the informative part of Nonpareil's R workflow: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, adjusted sequencing effort uses the `C^0.27` exponent, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. Nonpareil's R plotting/modeling code reads the `.npo` redundancy summary, not the `.npc` mate-count distribution. FastCover's default long-read curve therefore uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.

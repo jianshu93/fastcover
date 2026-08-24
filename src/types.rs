@@ -45,6 +45,7 @@ pub struct MateResult {
 #[derive(Clone, Debug)]
 pub struct SampleSummary {
     pub reads: u64,
+    pub bases: u64,
     pub portion: f64,
     pub mean: f64,
     pub sd: f64,

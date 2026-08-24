@@ -13,6 +13,7 @@ const FIT_WEIGHT_EXPONENTS: [f64; 9] = [0.0, 1.0, -1.0, 1.3, -1.1, 1.5, -1.5, 3.
 #[derive(Clone, Debug)]
 pub struct ModelPoint {
     pub reads: u64,
+    pub bases: u64,
     pub portion: f64,
     pub redundancy: f64,
     pub sd: f64,
@@ -206,13 +207,14 @@ pub fn write_model(path: &Path, model: &CoverageModel) -> Result<()> {
     }
     writeln!(
         w,
-        "kind\treads\tportion\tadjusted_effort_bp\tredundant_fraction\tsd\tq1\tmedian\tq3\tcoverage\tq1_coverage\tmedian_coverage\tq3_coverage\tfitted_coverage"
+        "kind\treads\tbases\tportion\tadjusted_effort_bp\tredundant_fraction\tsd\tq1\tmedian\tq3\tcoverage\tq1_coverage\tmedian_coverage\tq3_coverage\tfitted_coverage"
     )?;
     for point in &model.points {
         writeln!(
             w,
-            "observed\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "observed\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             point.reads,
+            point.bases,
             fmt_float(point.portion),
             fmt_float(point.adjusted_effort),
             fmt_float(point.redundancy),
@@ -230,7 +232,7 @@ pub fn write_model(path: &Path, model: &CoverageModel) -> Result<()> {
     for point in &model.curve {
         writeln!(
             w,
-            "model\t.\t.\t{}\t.\t.\t.\t.\t.\t{}\t.\t.\t.\t{}",
+            "model\t.\t.\t.\t{}\t.\t.\t.\t.\t.\t{}\t.\t.\t.\t{}",
             fmt_float(point.adjusted_effort),
             fmt_float(point.coverage),
             fmt_float(point.coverage),
@@ -242,16 +244,16 @@ pub fn write_model(path: &Path, model: &CoverageModel) -> Result<()> {
 
 fn build_points(
     summaries: &[SampleSummary],
-    total_reads: usize,
-    average_read_length: f64,
+    _total_reads: usize,
+    _average_read_length: f64,
     coverage_factor: f64,
     observed_coverage: f64,
 ) -> Vec<ModelPoint> {
-    let positive_reads = summaries
+    let positive_bases = summaries
         .iter()
-        .filter_map(|s| (s.reads > 0).then_some(s.reads as f64))
+        .filter_map(|s| (s.bases > 0).then_some(s.bases as f64))
         .collect::<Vec<_>>();
-    let max_log_xobs = positive_reads
+    let max_log_xobs = positive_bases
         .iter()
         .copied()
         .map(f64::ln)
@@ -261,17 +263,21 @@ fn build_points(
     let mut pre_adjusted = Vec::with_capacity(summaries.len());
     let mut max_pre_adjusted = 0.0_f64;
     for summary in summaries {
-        let value = if summary.reads == 0 || !max_log_xobs.is_finite() {
+        let value = if summary.bases == 0 || !max_log_xobs.is_finite() {
             0.0
         } else {
-            (max_log_xobs + c_scale * ((summary.reads as f64).ln() - max_log_xobs)).exp()
+            (max_log_xobs + c_scale * ((summary.bases as f64).ln() - max_log_xobs)).exp()
         };
         max_pre_adjusted = max_pre_adjusted.max(value);
         pre_adjusted.push(value);
     }
 
     let scaling = if max_pre_adjusted > 0.0 {
-        average_read_length * total_reads as f64 / max_pre_adjusted
+        summaries
+            .last()
+            .map(|summary| summary.bases as f64)
+            .unwrap_or(0.0)
+            / max_pre_adjusted
     } else {
         0.0
     };
@@ -283,6 +289,7 @@ fn build_points(
             let coverage = redundancy_to_coverage(summary.mean, coverage_factor);
             ModelPoint {
                 reads: summary.reads,
+                bases: summary.bases,
                 portion: summary.portion,
                 redundancy: clamp01(summary.mean),
                 sd: summary.sd,
@@ -686,6 +693,7 @@ mod tests {
         let summaries = vec![
             SampleSummary {
                 reads: 0,
+                bases: 0,
                 portion: 0.0,
                 mean: 0.0,
                 sd: 0.0,
@@ -695,6 +703,7 @@ mod tests {
             },
             SampleSummary {
                 reads: 100,
+                bases: 12_000,
                 portion: 1.0,
                 mean: 0.4,
                 sd: 0.01,

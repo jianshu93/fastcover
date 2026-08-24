@@ -346,8 +346,14 @@ fn run_sample(args: &RunConfig, sample: &SampleInput, prefix: &Path) -> Result<P
     );
 
     let sample_start = Instant::now();
-    let (summaries, all_values) =
-        utils::sample_curve(&mates, reads.len(), args.replicates, args.divide, args.seed);
+    let read_lengths = reads.iter().map(ReadRecord::len).collect::<Vec<_>>();
+    let (summaries, all_values) = utils::sample_curve(
+        &mates,
+        &read_lengths,
+        args.replicates,
+        args.divide,
+        args.seed,
+    );
     eprintln!(
         "{}: coverage-curve resampling completed in {:.2}s",
         sample.label,
@@ -1272,6 +1278,9 @@ fn write_summary(
         w,
         "# @mate_count_definition: nonself_selected_best_mate_count"
     )?;
+    writeln!(w, "# @resampling_effort_unit: bases")?;
+    writeln!(w, "# @resampling_scheme: bernoulli_reads_by_base_fraction")?;
+    writeln!(w, "# @redundancy_weighting: query_bases")?;
     writeln!(
         w,
         "# @passing_best_alignments: {}",
@@ -1280,24 +1289,24 @@ fn write_summary(
     writeln!(w, "# @replicates: {}", args.replicates)?;
     writeln!(w, "# @divide: {:.5}", args.divide)?;
     writeln!(w, "# @seed: {}", args.seed)?;
-    writeln!(w, "reads\tportion\tmean\tsd\tq1\tmedian\tq3")?;
+    writeln!(w, "reads\tbases\tportion\tmean\tsd\tq1\tmedian\tq3")?;
     for s in summaries {
         writeln!(
             w,
-            "{}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}",
-            s.reads, s.portion, s.mean, s.sd, s.q1, s.median, s.q3
+            "{}\t{}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}\t{:.8}",
+            s.reads, s.bases, s.portion, s.mean, s.sd, s.q1, s.median, s.q3
         )?;
     }
     Ok(())
 }
 
-fn write_all(path: &Path, all_values: &[(f64, usize, f64)]) -> Result<()> {
+fn write_all(path: &Path, all_values: &[(f64, u64, usize, f64)]) -> Result<()> {
     let file =
         File::create(path).with_context(|| format!("failed to create {}", path.display()))?;
     let mut w = BufWriter::new(file);
-    writeln!(w, "portion\treplicate\tredundant_fraction")?;
-    for (portion, rep, value) in all_values {
-        writeln!(w, "{portion:.8}\t{rep}\t{value:.8}")?;
+    writeln!(w, "portion\tbases\treplicate\tredundant_base_fraction")?;
+    for (portion, bases, rep, value) in all_values {
+        writeln!(w, "{portion:.8}\t{bases}\t{rep}\t{value:.8}")?;
     }
     Ok(())
 }
