@@ -1,7 +1,16 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rayon::prelude::*;
 
 use crate::types::{MateResult, SampleSummary};
+
+#[derive(Clone, Copy, Debug)]
+struct ResampleValue {
+    point_idx: usize,
+    portion: f64,
+    rep: usize,
+    value: f64,
+}
 
 pub fn sampling_points(total_reads: usize, divide: f64) -> Vec<f64> {
     if total_reads <= 1 {
@@ -42,23 +51,46 @@ pub fn sample_curve(
     seed: u64,
 ) -> (Vec<SampleSummary>, Vec<(f64, usize, f64)>) {
     let points = sampling_points(total_reads, divide);
-    let mut summaries = Vec::with_capacity(points.len());
-    let mut all = Vec::with_capacity(points.len() * replicates);
-
-    for &portion in &points {
-        let mut values = Vec::with_capacity(replicates);
-        for rep in 0..replicates {
-            let value = sample_once(
+    let job_count = points.len().saturating_mul(replicates);
+    let mut resampled = points
+        .iter()
+        .copied()
+        .enumerate()
+        .flat_map(|(point_idx, portion)| (0..replicates).map(move |rep| (point_idx, portion, rep)))
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .map(|(point_idx, portion, rep)| ResampleValue {
+            point_idx,
+            portion,
+            rep,
+            value: sample_once(
                 mates,
                 total_reads,
                 portion,
                 seed ^ ((rep as u64) << 32) ^ portion.to_bits(),
-            );
-            all.push((portion, rep, value));
-            values.push(value);
-        }
-        summaries.push(summarize(portion, total_reads, &mut values));
+            ),
+        })
+        .collect::<Vec<_>>();
+
+    resampled.sort_by_key(|value| (value.point_idx, value.rep));
+
+    let mut values_by_point = (0..points.len())
+        .map(|_| Vec::with_capacity(replicates))
+        .collect::<Vec<_>>();
+    let mut all = Vec::with_capacity(job_count);
+    for value in resampled {
+        values_by_point[value.point_idx].push(value.value);
+        all.push((value.portion, value.rep, value.value));
     }
+
+    let summaries = points
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(point_idx, portion)| {
+            summarize(portion, total_reads, &mut values_by_point[point_idx])
+        })
+        .collect::<Vec<_>>();
 
     (summaries, all)
 }
@@ -164,5 +196,31 @@ mod tests {
         ];
         let redundancy = sample_once(&mates, 2, 1.0, 7);
         assert!((redundancy - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parallel_sample_curve_is_deterministic() {
+        let mates = (0..64)
+            .map(|query| MateResult {
+                query,
+                mate_count: (query % 3 != 0) as u32,
+                ..MateResult::default()
+            })
+            .collect::<Vec<_>>();
+
+        let (summary_a, all_a) = sample_curve(&mates, mates.len(), 8, 0.7, 11);
+        let (summary_b, all_b) = sample_curve(&mates, mates.len(), 8, 0.7, 11);
+
+        assert_eq!(all_a, all_b);
+        assert_eq!(summary_a.len(), summary_b.len());
+        for (a, b) in summary_a.iter().zip(summary_b) {
+            assert_eq!(a.reads, b.reads);
+            assert_eq!(a.portion, b.portion);
+            assert_eq!(a.mean, b.mean);
+            assert_eq!(a.sd, b.sd);
+            assert_eq!(a.q1, b.q1);
+            assert_eq!(a.median, b.median);
+            assert_eq!(a.q3, b.q3);
+        }
     }
 }
