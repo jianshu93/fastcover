@@ -1,6 +1,6 @@
 # FastCover
 
-FastCover estimates long-read metagenomic diversity from read redundancy and coverage statistics. We name this diversity metric Stevens diversity (in memory of William Leslie Stevens).
+FastCover estimates long-read metagenomic coverage and diversity from read redundancy statistics. We name this diversity metric Stevens coverage and diversity (in memory of William Leslie Stevens).
 
 The core componet of FastCover is based on a minimizer Jaccard estimator implemented as a *seed-chain-quasi-alignment* framework, adapted here for metagenomic coverage and diversity estimation.
 
