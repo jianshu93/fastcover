@@ -56,6 +56,35 @@ sampleB.fastq.gz stool_B
 
 List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-sample plot as `PREFIX.svg` and `PREFIX.pdf`.
 
+## Merge Plots From Independent Runs
+
+For hundreds of samples, it is usually more efficient to run each sample independently on separate nodes and merge only the fitted model outputs afterward. The `fastcover-plot` binary reads per-sample `PREFIX.model.tsv` files and writes one combined SVG/PDF with the same two panels: Stevens coverage curves and Stevens diversity bars.
+
+```bash
+target/release/fastcover-plot \
+  --model node1/stool_A.model.tsv \
+  --model node2/marine_B.model.tsv \
+  --label stool_A \
+  --label marine_B \
+  --prefix merged/cohort
+```
+
+For many samples, use a list file. Each non-comment line is `model_path` followed by an optional sample label:
+
+```text
+node1/stool_A.model.tsv stool_A
+node2/marine_B.model.tsv marine_B
+node3/soil_C.model.tsv soil_C
+```
+
+Then merge without rerunning minimizer search, chaining, alignment, or Monte Carlo resampling:
+
+```bash
+target/release/fastcover-plot \
+  --list models.tsv \
+  --prefix merged/cohort
+```
+
 ## Thresholds
 
 - `--identity` is used by the TurboANI-like sketch prefilter and, with the default final verifier enabled, by the rammap-core DP alignment identity filter. Set `--alignment-targets 0` for sketch-only behavior.
@@ -93,4 +122,4 @@ Here is an example:
 
 ## Coverage Model
 
-The coverage model: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the log-effort transform, . FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
+The coverage model treats observed redundancy as coverage for long reads, `kappa` is the final redundant fraction, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the Nonpareil-style log-effort transform. FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
