@@ -1,8 +1,8 @@
 # FastCover
 
-FastCover estimates long-read metagenomic diversity from read redundancy and coverage statistics. We name this diversity metric Stevens diversity (in memory of William Leslie Stevens).
+FastCover estimates long-read metagenomic coverage and diversity from read redundancy statistics. We name this diversity metric Stevens coverage and diversity (in memory of William Leslie Stevens).
 
-The core componet of FastCover is based on a minimizer Jaccard estimator implemented as a *seed-chain-quasi-alignment* framework, adapted here for metagenomic coverage and diversity estimation.
+The core component of FastCover is based on a minimizer Jaccard estimator implemented as a *seed-chain-quasi-alignment* framework, adapted here for metagenomic coverage and diversity estimation.
 
 The core method uses SIMD canonical minimizer positions, deterministic twisted-tabulation rehashing, a shared-minimizer diagonal-band prefilter, de novo sliding offsets, and a bottom-k minimizer-window identity sketch. The winning sliding offset defines the semi-global overlap directly, then the default verifier runs rammap-core semi-global DP on the top alignment targets so final identity is base-level alignment identity rather than only a Jaccard estimate. A read contributes at most one non-self mate: FastCover selects the best verified alignment for each query, applies the identity and overlap filters to that single best hit, and randomly resolves exact ties using the run seed.
 
@@ -45,7 +45,7 @@ target/release/fastcover \
 
 By default, `fastcover` uses all logical CPU cores through Rayon. Use `--threads` only when you want to cap the worker count.
 
-Coverage-curve effort is raw sampled bases by default. To reproduce the original Nonpareil-style log-effort adjustment, pass `--c-adjust` or `--c-adjust=0.27`; custom exponents must be strictly between `0` and `1`.
+Coverage-curve effort is raw sampled bases by default. The production curve model is a two-component gamma mixture on `log1p(effort)`, which better matches long-tailed species/strain abundance structure than a single gamma curve. To reproduce the original Nonpareil-style log-effort adjustment, pass `--c-adjust` or `--c-adjust=0.27`; custom exponents must be strictly between `0` and `1`.
 
 For multiple samples, use `--list` instead of `--input`. Each non-comment line is `path` followed by an optional sample label:
 
@@ -55,6 +55,35 @@ sampleB.fastq.gz stool_B
 ```
 
 List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-sample plot as `PREFIX.svg` and `PREFIX.pdf`.
+
+## Merge Plots From Independent Runs
+
+For hundreds of samples, it is usually more efficient to run each sample independently on separate nodes and merge only the fitted model outputs afterward. The `fastcover-plot` binary reads per-sample `PREFIX.model.tsv` files and writes one combined SVG/PDF with the same two panels: Stevens coverage curves and Stevens diversity bars.
+
+```bash
+target/release/fastcover-plot \
+  --model node1/stool_A.model.tsv \
+  --model node2/marine_B.model.tsv \
+  --label stool_A \
+  --label marine_B \
+  --prefix merged/cohort
+```
+
+For many samples, use a list file. Each non-comment line is `model_path` followed by an optional sample label:
+
+```text
+node1/stool_A.model.tsv stool_A
+node2/marine_B.model.tsv marine_B
+node3/soil_C.model.tsv soil_C
+```
+
+Then merge without rerunning minimizer search, chaining, alignment, or Monte Carlo resampling:
+
+```bash
+target/release/fastcover-plot \
+  --list models.tsv \
+  --prefix merged/cohort
+```
 
 ## Thresholds
 
@@ -77,23 +106,35 @@ List mode writes per-sample outputs as `PREFIX.<sample>.*` and a combined multi-
 
 - `PREFIX.summary.tsv`: base-effort coverage-curve summary with mean, SD, and quartiles.
 - `PREFIX.all.tsv`: all replicate values behind the curve.
-- `PREFIX.model.tsv`: fitted gamma model diagnostics and curve points.
+- `PREFIX.model.tsv`: fitted mixture model diagnostics and curve points.
 - `PREFIX.mates.tsv`: per-read selected non-self mate count and best verified neighbor. With the default final verifier, `mate_count` is binary: `1` when the best hit passes, otherwise `0`.
 - `PREFIX.nonredundant.ids`: greedy representative read IDs.
 - `PREFIX.svg`: vector coverage curve.
 - `PREFIX.pdf`: vector coverage curve.
 
-The plot is SVG and PDF only. The x-axis starts at `1e6` bp because smaller efforts are below the scale of most individual microbial genomes. The combined figure uses the left 60% for the Stevens coverage curve and the right 40% for a base-weighted Stevens diversity bar plot. Empirical lines/dots are emphasized, gamma-model curves are thinner transparent dashed lines, grid lines are disabled, and multi-sample colors are generated with a golden-angle palette for many-sample overlays. The legend reports the observed current-effort coverage (`C`) and matched fitted coverage (`fit`); grey dashed guides mark current sequencing effort and the matched fitted coverage levels.
+The plot is SVG and PDF only. The x-axis starts at `1e6` bp because smaller efforts are below the scale of most individual microbial genomes. The combined figure uses the left 60% for the Stevens coverage curve and the right 40% for a base-weighted Stevens diversity bar plot. Empirical lines/dots are emphasized, fitted model curves are thinner transparent dashed lines, grid lines are disabled, and multi-sample colors are generated with a golden-angle palette for many-sample overlays. The legend reports the observed current-effort coverage (`C`) and matched fitted coverage (`fit`); grey dashed guides mark current sequencing effort and the matched fitted coverage levels.
 
 Here is an example:
 <div align="center">
-  <img width="90%" src ="fastcover_example.jpg">
+  <img width="100%" src ="fastcover_example.jpg">
 </div>
 
 
 ## Coverage Model
 
-The coverage model: observed redundancy is treated as coverage for long reads, `kappa` is the final redundant fraction, and the fitted curve is `pgamma(log1p(effort), alpha, beta)`. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the log-effort transform. FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases. Diversity is reported as `(alpha - 1) / beta` when `alpha > 1`, and `LRstar` is the effort required to reach 95% modeled coverage.
+The coverage model treats observed redundancy as coverage for long reads, and `kappa` is the final redundant fraction. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the Nonpareil-style log-effort transform. FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases.
 
-## Reference
-Paper to come
+The default fitted curve is a two-component gamma mixture,
+
+```text
+C(E) = w * GammaCDF(log1p(E); shape1, rate1)
+     + (1 - w) * GammaCDF(log1p(E); shape2, rate2)
+```
+
+This is useful in practice because microbial species and strain abundances are often close to log-normal or otherwise long-tailed. A mixture can place one component on abundant/core sequence space and another on rarer targets, while a single gamma distribution must smear both regimes into one shape. Stevens diversity is reported as the area under the fitted survival curve on the log-effort axis:
+
+```text
+D = integral_0^inf (1 - C(exp(x) - 1)) dx
+```
+
+`diversity_q99` reports the same area truncated at the fitted 99% quantile, and `remaining_diversity_at_observed_effort` reports the fitted survival area still beyond the observed sequencing effort. `LRstar` is the effort required to reach 95% modeled coverage. The original gamma-default implementation is saved on the `gamma-model` branch, and the generalized-gamma implementation is saved on the `generalized-gamma-model` branch.
