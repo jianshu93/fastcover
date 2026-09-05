@@ -71,8 +71,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
     let mut total_bases = 0_usize;
     let mut average_read_length = 0.0;
     let mut coverage_factor = 1.0;
-    let mut c_adjust = None;
-    let mut effort_adjust_scale = 1.0;
     let mut kappa = 0.0;
     let mut observed_coverage = 0.0;
     let mut total_effort = 0.0;
@@ -99,8 +97,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
                 &mut total_bases,
                 &mut average_read_length,
                 &mut coverage_factor,
-                &mut c_adjust,
-                &mut effort_adjust_scale,
                 &mut kappa,
                 &mut observed_coverage,
                 &mut total_effort,
@@ -146,8 +142,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
         total_bases,
         average_read_length,
         coverage_factor,
-        c_adjust,
-        effort_adjust_scale,
         kappa,
         observed_coverage,
         total_effort,
@@ -174,8 +168,6 @@ fn parse_metadata(
     total_bases: &mut usize,
     average_read_length: &mut f64,
     coverage_factor: &mut f64,
-    c_adjust: &mut Option<f64>,
-    effort_adjust_scale: &mut f64,
     kappa: &mut f64,
     observed_coverage: &mut f64,
     total_effort: &mut f64,
@@ -200,8 +192,6 @@ fn parse_metadata(
         "bases" => *total_bases = value.parse()?,
         "average_read_length" => *average_read_length = value.parse()?,
         "coverage_factor" => *coverage_factor = value.parse()?,
-        "C_adjust" => *c_adjust = parse_optional(value)?,
-        "effort_adjust_scale" => *effort_adjust_scale = value.parse()?,
         "kappa" => *kappa = value.parse()?,
         "C" => *observed_coverage = value.parse()?,
         "LR" => *total_effort = value.parse()?,
@@ -293,8 +283,6 @@ mod tests {
 # @bases: 1000
 # @average_read_length: 100
 # @coverage_factor: 1
-# @C_adjust: none
-# @effort_adjust_scale: 1
 # @kappa: 0.5
 # @C: 0.5
 # @LR: 1000
@@ -313,7 +301,6 @@ model\t.\t.\t.\t1500\t.\t.\t.\t.\t.\t0.7\t.\t.\t.\t0.7
 ";
         let model = parse_model(Cursor::new(text)).unwrap();
         assert_eq!(model.total_reads, 10);
-        assert_eq!(model.c_adjust, None);
         assert_eq!(model.diversity, Some(12.5));
         assert_eq!(model.diversity_q99, Some(12.3));
         assert_eq!(model.remaining_diversity, Some(0.8));
@@ -326,7 +313,7 @@ model\t.\t.\t.\t1500\t.\t.\t.\t.\t.\t0.7\t.\t.\t.\t0.7
     }
 
     #[test]
-    fn reads_legacy_model_without_c_adjust_metadata() {
+    fn reads_legacy_model_without_model_metadata() {
         let text = "\
 # @reads: 1
 # @bases: 100
@@ -334,8 +321,6 @@ kind\treads\tbases\tportion\tadjusted_effort_bp\tredundant_fraction\tsd\tq1\tmed
 observed\t1\t100\t1\t100\t0.2\t0\t0.2\t0.2\t0.2\t0.2\t0.2\t0.2\t0.2\tNA
 ";
         let model = parse_model(Cursor::new(text)).unwrap();
-        assert_eq!(model.c_adjust, None);
-        assert_eq!(model.effort_adjust_scale, 1.0);
         assert_eq!(model.model_family, "gamma");
         assert_eq!(model.model_params, None);
     }

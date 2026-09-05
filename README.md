@@ -45,7 +45,7 @@ target/release/fastcover \
 
 By default, `fastcover` uses all logical CPU cores through Rayon. Use `--threads` only when you want to cap the worker count.
 
-Coverage-curve effort is raw sampled bases by default. The production curve model is a two-component gamma mixture on `log1p(effort)`, which better matches long-tailed species/strain abundance structure than a single gamma curve. To reproduce the original Nonpareil-style log-effort adjustment, pass `--c-adjust` or `--c-adjust=0.27`; custom exponents must be strictly between `0` and `1`.
+Coverage-curve effort is raw sampled bases. The production curve model is a two-component gamma mixture on `log1p(effort)`, which better matches long-tailed species/strain abundance structure than a single gamma curve.
 
 For multiple samples, use `--list` instead of `--input`. Each non-comment line is `path` followed by an optional sample label:
 
@@ -100,7 +100,6 @@ target/release/fastcover-plot \
 - `--alignment-targets` is the number of top sketch-passing targets searched with rammap-core semi-global DP per query. The default is `3`; values above `16` are rejected. Only the single best verified alignment is used for redundancy, so larger values increase search depth but cannot add multiple mates to one query.
 - `--min-alignment-ratio` filters by the shorter-read overlap ratio, `overlap_len / min(query_len, target_len)`. This rejects tiny end overlaps and requires the shorter read to be meaningfully covered.
 - `--min-query-coverage` filters by query-side coverage, `overlap_len / query_len`. This prevents a long query from being called redundant when only a small part of it overlaps a shorter target. The default is `0.75`; set it to `0` for shorter-read-only Nonpareil-like overlap behavior.
-- `--c-adjust[=EXP]` enables optional Nonpareil-style adjusted effort, `E' = B * (E / B)^(C^EXP)`, where `B` is total sampled bases at full effort and `C` is the observed full-effort coverage. With no value, `EXP` is `0.27`; without the option, FastCover uses raw base effort, `E' = E`.
 
 ## Outputs
 
@@ -122,7 +121,7 @@ Here is an example:
 
 ## Coverage Model
 
-The coverage model treats observed redundancy as coverage for long reads, and `kappa` is the final redundant fraction. By default, effort is raw base effort, which is the most direct long-read interpretation. The optional `--c-adjust` switch applies the Nonpareil-style log-effort transform. FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases.
+The coverage model treats observed redundancy as coverage for long reads, and `kappa` is the final redundant fraction. Effort is raw base effort, which is the most direct long-read interpretation. FastCover's default long-read curve uses binary best-mate redundancy to generate its summary table rather than carrying all matching reads into the curve. The curve is base-weighted for long reads: resampling points are fractions of total bases, and each replicate reports redundant query bases divided by sampled query bases.
 
 The default fitted curve is a two-component gamma mixture,
 
