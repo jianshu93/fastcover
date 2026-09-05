@@ -9,7 +9,7 @@ use crate::types::SampleSummary;
 
 const TARGET_COVERAGE: f64 = 0.95;
 pub const DEFAULT_MODEL_CURVE_MAX_EFFORT_BP: f64 = 1.0e13;
-const DEFAULT_PRODUCTION_MODEL_FAMILY: &str = "generalized_gamma";
+const DEFAULT_PRODUCTION_MODEL_FAMILY: &str = "gamma_mixture2";
 const RESTRICTED_DIVERSITY_QUANTILE: f64 = 0.99;
 
 #[derive(Clone, Debug)]
