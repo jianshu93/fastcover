@@ -78,7 +78,11 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
     let mut total_effort = 0.0;
     let mut effort_at_target = None;
     let mut diversity = None;
+    let mut diversity_q99 = None;
+    let mut remaining_diversity = None;
     let mut model_r = None;
+    let mut model_family = "gamma".to_string();
+    let mut model_params = None;
     let mut alpha = None;
     let mut beta = None;
     let mut target_coverage = 0.95;
@@ -102,7 +106,11 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
                 &mut total_effort,
                 &mut effort_at_target,
                 &mut diversity,
+                &mut diversity_q99,
+                &mut remaining_diversity,
                 &mut model_r,
+                &mut model_family,
+                &mut model_params,
                 &mut alpha,
                 &mut beta,
                 &mut target_coverage,
@@ -145,7 +153,11 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
         total_effort,
         effort_at_target,
         diversity,
+        diversity_q99,
+        remaining_diversity,
         model_r,
+        model_family,
+        model_params,
         alpha,
         beta,
         target_coverage,
@@ -169,7 +181,11 @@ fn parse_metadata(
     total_effort: &mut f64,
     effort_at_target: &mut Option<f64>,
     diversity: &mut Option<f64>,
+    diversity_q99: &mut Option<f64>,
+    remaining_diversity: &mut Option<f64>,
     model_r: &mut Option<f64>,
+    model_family: &mut String,
+    model_params: &mut Option<String>,
     alpha: &mut Option<f64>,
     beta: &mut Option<f64>,
     target_coverage: &mut f64,
@@ -191,7 +207,11 @@ fn parse_metadata(
         "LR" => *total_effort = value.parse()?,
         "LRstar" => *effort_at_target = parse_optional(value)?,
         "diversity" => *diversity = parse_optional(value)?,
+        "diversity_q99" => *diversity_q99 = parse_optional(value)?,
+        "remaining_diversity_at_observed_effort" => *remaining_diversity = parse_optional(value)?,
         "modelR" => *model_r = parse_optional(value)?,
+        "model_family" => *model_family = value.to_string(),
+        "model_params" => *model_params = parse_optional_string(value),
         "alpha" => *alpha = parse_optional(value)?,
         "beta" => *beta = parse_optional(value)?,
         "target_coverage" => *target_coverage = value.parse()?,
@@ -240,6 +260,11 @@ fn parse_optional(value: &str) -> Result<Option<f64>> {
     }
 }
 
+fn parse_optional_string(value: &str) -> Option<String> {
+    (!value.is_empty() && value != "NA" && value != "." && !value.eq_ignore_ascii_case("none"))
+        .then(|| value.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -262,6 +287,8 @@ mod tests {
     fn reads_model_metadata_and_rows() {
         let text = "\
 # @impl: FastCover coverage gamma model
+# @model_family: gamma
+# @model_params: shape=3;rate=0.16
 # @reads: 10
 # @bases: 1000
 # @average_read_length: 100
@@ -273,6 +300,8 @@ mod tests {
 # @LR: 1000
 # @LRstar: 2000
 # @diversity: 12.5
+# @diversity_q99: 12.3
+# @remaining_diversity_at_observed_effort: 0.8
 # @modelR: 0.99
 # @alpha: 3
 # @beta: 0.16
@@ -286,6 +315,10 @@ model\t.\t.\t.\t1500\t.\t.\t.\t.\t.\t0.7\t.\t.\t.\t0.7
         assert_eq!(model.total_reads, 10);
         assert_eq!(model.c_adjust, None);
         assert_eq!(model.diversity, Some(12.5));
+        assert_eq!(model.diversity_q99, Some(12.3));
+        assert_eq!(model.remaining_diversity, Some(0.8));
+        assert_eq!(model.model_family, "gamma");
+        assert_eq!(model.model_params.as_deref(), Some("shape=3;rate=0.16"));
         assert_eq!(model.points.len(), 1);
         assert_eq!(model.curve.len(), 1);
         assert_eq!(model.points[0].fitted_coverage, Some(0.51));
@@ -303,5 +336,7 @@ observed\t1\t100\t1\t100\t0.2\t0\t0.2\t0.2\t0.2\t0.2\t0.2\t0.2\t0.2\tNA
         let model = parse_model(Cursor::new(text)).unwrap();
         assert_eq!(model.c_adjust, None);
         assert_eq!(model.effort_adjust_scale, 1.0);
+        assert_eq!(model.model_family, "gamma");
+        assert_eq!(model.model_params, None);
     }
 }

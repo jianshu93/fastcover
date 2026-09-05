@@ -1113,6 +1113,20 @@ fn fmt_option(value: Option<f64>) -> String {
 }
 
 impl FamilyFit {
+    pub fn coverage_at_effort(&self, effort: f64) -> Option<f64> {
+        if effort <= 0.0 || !effort.is_finite() {
+            return Some(0.0);
+        }
+        self.distribution.cdf_x(effort.ln_1p())
+    }
+
+    pub fn legacy_gamma_params(&self) -> (Option<f64>, Option<f64>) {
+        match self.distribution {
+            Distribution::Gamma { shape, rate } => (Some(shape), Some(rate)),
+            _ => (None, None),
+        }
+    }
+
     pub fn tsv_header() -> &'static str {
         "family\tparameters\tk\tn\tsse\trmse\tmodel_r\taic\tbic\teffort95_bp\tmode_diversity\tarea_diversity\tarea_diversity_q99\tcoverage_at_observed_effort\tremaining_area_at_observed_effort"
     }
