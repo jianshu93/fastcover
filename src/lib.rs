@@ -3,6 +3,7 @@ pub mod coverage;
 pub mod coverage_model;
 pub mod final_align;
 pub mod io;
+pub mod model_families;
 pub mod model_io;
 pub mod plot;
 pub mod sketch_params;

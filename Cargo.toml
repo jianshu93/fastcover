@@ -15,6 +15,10 @@ path = "src/bin/fastcover.rs"
 name = "fastcover-plot"
 path = "src/bin/fastcover-plot.rs"
 
+[[bin]]
+name = "fastcover-model-exp"
+path = "src/bin/fastcover-model-exp.rs"
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
