@@ -206,34 +206,27 @@ fn render_coverage_svg(samples: &[PlotSample]) -> Result<String> {
 
             let x_arrow_tip = 0.01;
             let x_arrow_full_top = (max_matched_coverage * 0.55).clamp(0.12, 0.72);
-            let x_arrow_height = (x_arrow_full_top - x_arrow_tip) * 0.20;
-            let max_arrow_lanes = guides.len().clamp(1, 8);
-            for (idx, guide) in guides.iter().enumerate() {
+            let x_arrow_top = x_arrow_tip + (x_arrow_full_top - x_arrow_tip) * 0.20;
+            for guide in &guides {
                 let current_effort = guide.current_effort;
-                let lane = current_effort_arrow_lane(idx, &guides, max_arrow_lanes);
-                let lane_offset = lane as f64 * 0.018;
-                let arrow_tip = x_arrow_tip + lane_offset;
-                let arrow_top = arrow_tip + x_arrow_height;
-                let arrow_head_height = (x_arrow_height * 0.45).max(0.018).min(x_arrow_height);
-                let arrow_head_top = arrow_tip + arrow_head_height;
                 let arrow_style = ShapeStyle::from(&guide.color).stroke_width(3);
                 chart
                     .draw_series([
                         PathElement::new(
-                            [(current_effort, arrow_top), (current_effort, arrow_tip)],
+                            [(current_effort, x_arrow_top), (current_effort, x_arrow_tip)],
                             arrow_style,
                         ),
                         PathElement::new(
                             [
-                                (current_effort / 1.18, arrow_head_top),
-                                (current_effort, arrow_tip),
+                                (current_effort / 1.18, x_arrow_tip + 0.035),
+                                (current_effort, x_arrow_tip),
                             ],
                             arrow_style,
                         ),
                         PathElement::new(
                             [
-                                (current_effort * 1.18, arrow_head_top),
-                                (current_effort, arrow_tip),
+                                (current_effort * 1.18, x_arrow_tip + 0.035),
+                                (current_effort, x_arrow_tip),
                             ],
                             arrow_style,
                         ),
@@ -369,26 +362,6 @@ fn coverage_guide(sample: &PlotSample, color: RGBColor, min_x: f64, max_x: f64) 
         matched_coverage,
         color,
     }
-}
-
-fn current_effort_arrow_lane(
-    guide_idx: usize,
-    guides: &[CoverageGuide],
-    max_lanes: usize,
-) -> usize {
-    let current = guides[guide_idx].current_effort;
-    guides[..guide_idx]
-        .iter()
-        .filter(|guide| current_efforts_visually_overlap(current, guide.current_effort))
-        .count()
-        % max_lanes.max(1)
-}
-
-fn current_efforts_visually_overlap(a: f64, b: f64) -> bool {
-    if a <= 0.0 || b <= 0.0 || !a.is_finite() || !b.is_finite() {
-        return false;
-    }
-    (a.ln() - b.ln()).abs() <= 0.06
 }
 
 fn coverage_legend_label(sample: &PlotSample, guide: &CoverageGuide) -> String {
