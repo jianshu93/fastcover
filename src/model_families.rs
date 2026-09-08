@@ -174,11 +174,8 @@ fn fit_data(model: &CoverageModel) -> Vec<Datum> {
         .collect()
 }
 
-fn fit_gamma(data: &[Datum], model: &CoverageModel) -> Option<Distribution> {
+fn fit_gamma(data: &[Datum], _model: &CoverageModel) -> Option<Distribution> {
     let mut starts = Vec::new();
-    if let (Some(shape), Some(rate)) = (model.alpha, model.beta) {
-        starts.push(vec![shape.ln(), rate.ln()]);
-    }
 
     let mean_guess = median_transition_x(data).unwrap_or_else(|| data[data.len() / 2].x);
     let means = unique_finite([
@@ -1118,13 +1115,6 @@ impl FamilyFit {
             return Some(0.0);
         }
         self.distribution.cdf_x(effort.ln_1p())
-    }
-
-    pub fn legacy_gamma_params(&self) -> (Option<f64>, Option<f64>) {
-        match self.distribution {
-            Distribution::Gamma { shape, rate } => (Some(shape), Some(rate)),
-            _ => (None, None),
-        }
     }
 
     pub fn tsv_header() -> &'static str {

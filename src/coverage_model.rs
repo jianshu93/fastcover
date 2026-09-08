@@ -52,8 +52,6 @@ pub struct CoverageModel {
     pub model_r: Option<f64>,
     pub model_family: String,
     pub model_params: Option<String>,
-    pub alpha: Option<f64>,
-    pub beta: Option<f64>,
     pub target_coverage: f64,
     pub points: Vec<ModelPoint>,
     pub curve: Vec<ModelCurvePoint>,
@@ -92,8 +90,6 @@ pub fn fit_from_summaries(
         model_r: None,
         model_family: DEFAULT_PRODUCTION_MODEL_FAMILY.to_string(),
         model_params: None,
-        alpha: None,
-        beta: None,
         target_coverage: TARGET_COVERAGE,
         points,
         curve: Vec::new(),
@@ -120,7 +116,6 @@ pub fn fit_from_summaries(
                             coverage: point.coverage,
                         })
                         .collect();
-                let (alpha, beta) = fit.legacy_gamma_params();
                 model.model_family = fit.family.clone();
                 model.model_params = Some(fit.params.clone());
                 model.effort_at_target = fit.effort_at_target;
@@ -128,8 +123,6 @@ pub fn fit_from_summaries(
                 model.diversity_q99 = fit.restricted_area_diversity;
                 model.remaining_diversity = fit.remaining_area_at_observed_effort;
                 model.model_r = fit.model_r;
-                model.alpha = alpha;
-                model.beta = beta;
                 model.warning = Some(format!(
                     "selected {} coverage model; SSE {:.6}; BIC {:.3}",
                     fit.family, fit.sse, fit.bic
@@ -189,8 +182,6 @@ pub fn write_model(path: &Path, model: &CoverageModel) -> Result<()> {
         fmt_optional(model.remaining_diversity)
     )?;
     writeln!(w, "# @modelR: {}", fmt_optional(model.model_r))?;
-    writeln!(w, "# @alpha: {}", fmt_optional(model.alpha))?;
-    writeln!(w, "# @beta: {}", fmt_optional(model.beta))?;
     writeln!(
         w,
         "# @target_coverage: {}",

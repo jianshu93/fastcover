@@ -81,8 +81,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
     let mut model_r = None;
     let mut model_family = "gamma".to_string();
     let mut model_params = None;
-    let mut alpha = None;
-    let mut beta = None;
     let mut target_coverage = 0.95;
     let mut warning = None;
     let mut points = Vec::new();
@@ -107,8 +105,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
                 &mut model_r,
                 &mut model_family,
                 &mut model_params,
-                &mut alpha,
-                &mut beta,
                 &mut target_coverage,
                 &mut warning,
             )
@@ -152,8 +148,6 @@ fn parse_model<R: BufRead>(reader: R) -> Result<CoverageModel> {
         model_r,
         model_family,
         model_params,
-        alpha,
-        beta,
         target_coverage,
         points,
         curve,
@@ -178,8 +172,6 @@ fn parse_metadata(
     model_r: &mut Option<f64>,
     model_family: &mut String,
     model_params: &mut Option<String>,
-    alpha: &mut Option<f64>,
-    beta: &mut Option<f64>,
     target_coverage: &mut f64,
     warning: &mut Option<String>,
 ) -> Result<()> {
@@ -202,8 +194,6 @@ fn parse_metadata(
         "modelR" => *model_r = parse_optional(value)?,
         "model_family" => *model_family = value.to_string(),
         "model_params" => *model_params = parse_optional_string(value),
-        "alpha" => *alpha = parse_optional(value)?,
-        "beta" => *beta = parse_optional(value)?,
         "target_coverage" => *target_coverage = value.parse()?,
         "note" => *warning = Some(value.to_string()),
         _ => {}
@@ -291,8 +281,6 @@ mod tests {
 # @diversity_q99: 12.3
 # @remaining_diversity_at_observed_effort: 0.8
 # @modelR: 0.99
-# @alpha: 3
-# @beta: 0.16
 # @target_coverage: 0.95
 # @note: parser smoke test
 kind\treads\tbases\tportion\tadjusted_effort_bp\tredundant_fraction\tsd\tq1\tmedian\tq3\tcoverage\tq1_coverage\tmedian_coverage\tq3_coverage\tfitted_coverage
