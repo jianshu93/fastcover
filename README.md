@@ -125,15 +125,13 @@ The coverage model treats observed redundancy as coverage for long reads, and `k
 
 The default fitted curve is a two-component gamma mixture,
 
-```text
-C(E) = w * GammaCDF(log1p(E); shape1, rate1)
-     + (1 - w) * GammaCDF(log1p(E); shape2, rate2)
-```
+$$C(E) = w \cdot F_\Gamma\big(\log(1+E);\ k_1, \theta_1\big) + (1 - w) \cdot F_\Gamma\big(\log(1+E);\ k_2, \theta_2\big)$$
+
 
 This is useful in practice because microbial species and strain abundances are often close to log-normal or otherwise long-tailed. A mixture can place one component on abundant/core sequence space and another on rarer targets, while a single gamma distribution must smear both regimes into one shape. Stevens diversity is reported as the area under the fitted survival curve on the log-effort axis:
 
-```text
-D = integral_0^inf (1 - C(exp(x) - 1)) dx
-```
+
+$$D = \int_0^{\infty} \left(1 - C\!\left(e^{x} - 1\right)\right)\, dx$$
+
 
 `diversity_q99` reports the same area truncated at the fitted 99% quantile, and `remaining_diversity_at_observed_effort` reports the fitted survival area still beyond the observed sequencing effort. `LRstar` is the effort required to reach 95% modeled coverage. The original gamma-default implementation is saved on the `gamma-model` branch, and the generalized-gamma implementation is saved on the `generalized-gamma-model` branch.
